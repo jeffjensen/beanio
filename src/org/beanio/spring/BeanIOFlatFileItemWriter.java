@@ -1,12 +1,12 @@
 /*
  * Copyright 2011 Kevin Seim
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -30,31 +30,33 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.io.Resource;
 import org.springframework.util.*;
 
+import jakarta.annotation.PostConstruct;
+
 /**
- * A Spring Batch item writer that uses a BeanIO stream mapping file to write items 
+ * A Spring Batch item writer that uses a BeanIO stream mapping file to write items
  * to a flat file.  Restart capabilities are fully supported.
- * 
+ *
  * <p>This implementation requires Spring 2.5 or greater, and Spring Batch 2.1.x.</p>
- *  
+ *
  * @author Kevin Seim
  * @since 1.2
  * @param <T> Class type written to the file
  */
-public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>, 
+public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
     ResourceAwareItemWriterItemStream<T>, InitializingBean {
 
     private static final String DEFAULT_CHARSET = Charset.defaultCharset().name();
     private static final String DEFAULT_LINE_SEPARATOR = System.getProperty("line.separator");
-    
+
     private static final String RESTART_KEY = "current.count";
     private static final String WRITER_STATE_NAMESPACE = "bw";
-    
+
     private StreamFactory streamFactory;
     private Resource streamMapping;
     private String streamName;
-    
+
     private Resource resource;
-    
+
     private boolean saveState = true;
     private boolean append = false;
     private boolean shouldDeleteIfExists = true;
@@ -64,28 +66,26 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
     private String lineSeparator = DEFAULT_LINE_SEPARATOR;
     private FlatFileHeaderCallback headerCallback;
     private ExecutionContextUserSupport ecSupport = new ExecutionContextUserSupport();
-    
+
     private Stream stream;
 
-    /**
-     * Constructs a new <tt>BeanIOFlatFileItemWriter</tt>.
-     */
-    public BeanIOFlatFileItemWriter() {
+    @PostConstruct
+    public void updateName() {
         setName(ClassUtils.getShortName(BeanIOFlatFileItemWriter.class));
     }
-    
+
     /*
      * (non-Javadoc)
      * @see org.springframework.beans.factory.InitializingBean#afterPropertiesSet()
      */
     public void afterPropertiesSet() throws Exception {
         initializeStreamFactory();
-        
+
         if (append) {
             shouldDeleteIfExists = false;
         }
     }
-    
+
     /*
      * (non-Javadoc)
      * @see org.springframework.batch.item.ItemStream#open(org.springframework.batch.item.ExecutionContext)
@@ -94,13 +94,13 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
         if (stream != null) {
             return;
         }
-        
+
         Assert.notNull(resource, "The resource must be set");
-        
+
         stream = new Stream();
         stream.open(executionContext);
     }
-    
+
     /*
      * (non-Javadoc)
      * @see org.springframework.batch.item.ItemStream#update(org.springframework.batch.item.ExecutionContext)
@@ -109,7 +109,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
         if (stream == null) {
             throw new ItemStreamException("ItemStream not open or already closed.");
         }
-        
+
         if (saveState) {
             stream.update(executionContext);
         }
@@ -125,7 +125,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
             stream = null;
         }
     }
-   
+
     /*
      * (non-Javadoc)
      * @see org.springframework.batch.item.ItemWriter#write(java.util.List)
@@ -135,6 +135,12 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
             throw new WriterNotOpenException("Writer must be open before it can be written to");
         }
         stream.write(items);
+    }
+
+    @Override
+    public void write(final Chunk<? extends T> chunk) throws Exception {
+        final List<? extends T> items = chunk.getItems();
+        write(items);
     }
 
     /**
@@ -164,7 +170,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
     public void setStreamName(String streamName) {
         this.streamName = streamName;
     }
-    
+
     /*
      * (non-Javadoc)
      * @see org.springframework.batch.item.file.ResourceAwareItemWriterItemStream#setResource(org.springframework.core.io.Resource)
@@ -172,7 +178,12 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
     public void setResource(Resource resource) {
         this.resource = resource;
     }
-    
+
+    @Override
+    public void setResource(final WritableResource resource) {
+        this.resource = resource;
+    }
+
     /**
      * Sets the output stream encoding.  If not set, the default system charset
      * is used to write the output stream.
@@ -181,7 +192,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
     public void setEncoding(String encoding) {
         this.encoding = encoding;
     }
-    
+
     /**
      * Creates a {@link StreamFactory} if one was not set, loads the stream
      * mapping resource if set, and validates the <tt>StreamFactory</tt> has a
@@ -193,7 +204,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
         if (streamFactory == null) {
             streamFactory = StreamFactory.newInstance();
         }
-        
+
         // load the configured stream mapping if the stream name is not already mapped
         if (!streamFactory.isMapped(streamName) && streamMapping != null) {
             InputStream in = streamMapping.getInputStream();
@@ -204,7 +215,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 IOUtil.closeQuietly(in);
             }
         }
-        
+
         if (!streamFactory.isMapped(streamName)) {
             throw new IllegalStateException("No mapping configuration for stream '" + streamName + "'");
         }
@@ -234,7 +245,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
     public void setShouldDeleteIfExists(boolean shouldDeleteIfExists) {
         this.shouldDeleteIfExists = shouldDeleteIfExists;
     }
-    
+
     /**
      * Flag to indicate that the target file should be deleted if no lines have
      * been written (other than header and footer) on close. Defaults to false.
@@ -254,7 +265,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
     public void setSaveState(boolean saveState) {
         this.saveState = saveState;
     }
-    
+
     /**
      * Flag to indicate that writing to the buffer should be delayed if a
      * transaction is active. Defaults to true.
@@ -273,7 +284,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
     public void setName(String name) {
         ecSupport.setName(name);
     }
-    
+
     /**
      * Sets the line separator used for the header and footer callback only. Other lines are
      * terminated based on the BeanIO stream mapping configuration.  Defaults to the System property
@@ -283,7 +294,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
     public void setLineSeparator(String lineSeparator) {
         this.lineSeparator = lineSeparator;
     }
-    
+
     /**
      * The <tt>FlatFileHeaderCallback</tt> if called before writing the first item to the
      * file.  The configured line separator is written immediately following the header.
@@ -296,11 +307,11 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
 
     /*
      * This inner class stores state information for the last opened stream.  Its implemented
-     * as an inner class so that close() and open() can be called without error when a 
+     * as an inner class so that close() and open() can be called without error when a
      * transaction is in flight.
      */
     private class Stream {
-        
+
         private FileOutputStream outputStream;
         private FileChannel fileChannel;
         private Writer writer; // TransactionAwareBufferedWriter if transactional, BufferedWriter otherwise
@@ -308,13 +319,13 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
         private boolean restarted = false;
         private long lastMarkedByteOffsetPosition = 0L;
         private long itemsWritten = 0L;
-        
+
         /*
          * Opens this stream and restores it state from the given execution context.
          */
         public void open(ExecutionContext executionContext) throws ItemStreamException {
             Assert.notNull(resource, "The resource must be set");
-            
+
             File file;
             try {
                 file = resource.getFile();
@@ -322,7 +333,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
             catch (IOException e) {
                 throw new ItemStreamException("Could not convert resource to file: '" + resource + "'", e);
             }
-            
+
             // determine if we are restarting using the stored execution context
             if (executionContext.containsKey(ecSupport.getKey(RESTART_KEY))) {
                 lastMarkedByteOffsetPosition = executionContext.getLong(ecSupport.getKey(RESTART_KEY));
@@ -363,7 +374,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
             if (!file.canWrite()) {
                 throw new ItemStreamException("File is not writable: " + file.getAbsolutePath());
             }
-            
+
             boolean appending = false;
             try {
                 // open a stream to the file
@@ -371,20 +382,20 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 fileChannel = outputStream.getChannel();
                 writer = createBufferedWriter(fileChannel, encoding);
                 writer.flush();
-                
+
                 long fileSize = fileChannel.size();
-                
+
                 if (append && fileSize > 0) {
                     appending = true;
                 }
-                
+
                 // in case of restarting reset position to last committed point
                 if (restarted) {
                     // validate the file size is at least as big as was previously committed
                     if (fileSize < lastMarkedByteOffsetPosition) {
                         throw new ItemStreamException("Current file size is smaller than size at last commit");
                     }
-                    
+
                     // truncate the file to the last known good position
                     fileChannel.truncate(lastMarkedByteOffsetPosition);
                     fileChannel.position(lastMarkedByteOffsetPosition);
@@ -393,23 +404,23 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 beanWriter = streamFactory.createWriter(streamName, stream.writer);
                 if (restarted && beanWriter instanceof StatefulWriter) {
                     String namespace = ecSupport.getKey(WRITER_STATE_NAMESPACE);
-                    
+
                     Map<String,Object> writerState = new HashMap<String,Object>();
                     for (Map.Entry<String,Object> entry : executionContext.entrySet()) {
                         if (entry.getKey().startsWith(namespace)) {
                             writerState.put(entry.getKey(), entry.getValue());
                         }
                     }
-                    
+
                     ((StatefulWriter)beanWriter).restoreState(namespace, writerState);
                 }
-                
+
                 itemsWritten = 0;
             }
             catch (IOException ioe) {
                 throw new ItemStreamException("Failed to initialize writer", ioe);
             }
-            
+
             if (lastMarkedByteOffsetPosition == 0 && !appending) {
                 if (headerCallback != null) {
                     try {
@@ -422,7 +433,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 }
             }
         }
-        
+
         /*
          * Updates the given execution context.
          */
@@ -435,26 +446,26 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                     // flushing the bean writer will not flush the TransactionAwareBufferWRiter if
                     // a transaction is active
                     beanWriter.flush();
-                    
+
                     // get the flushed file size
                     pos = fileChannel.position();
-                    
+
                     // add in the bufferred transaction
                     if (transactional) {
                         pos += ((TransactionAwareBufferedWriter) writer).getBufferSize();
                     }
                 }
-                
+
                 executionContext.putLong(ecSupport.getKey(RESTART_KEY), pos);
-                
+
                 // if the bean writer is stateful, gather its state information and add
                 // it to the execution context
                 if (beanWriter instanceof StatefulWriter) {
                     String namespace = ecSupport.getKey(WRITER_STATE_NAMESPACE);
-                    
-                    Map<String,Object> writerState = new HashMap<String,Object>();     
+
+                    Map<String,Object> writerState = new HashMap<String,Object>();
                     ((StatefulWriter)beanWriter).updateState(namespace, writerState);
-                    
+
                     for (Map.Entry<String,Object> entry : writerState.entrySet()) {
                         executionContext.put(entry.getKey(), entry.getValue());
                     }
@@ -464,7 +475,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 throw new ItemStreamException("ItemStream does not return current position properly", e);
             }
         }
-        
+
         /*
          * Writes a list of items to the stream.
          */
@@ -480,7 +491,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
             }
             beanWriter.flush();
         }
-        
+
         /*
          * Closes this stream.
          */
@@ -497,9 +508,9 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 }
             }
         }
-        
+
         /*
-         * Releases all resources. 
+         * Releases all resources.
          */
         private void destroy() {
             try {
@@ -511,7 +522,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 catch (IOException ioe) {
                     throw new ItemStreamException("Unable to close the the ItemWriter", ioe);
                 }
-                
+
                 if (!restarted && itemsWritten == 0 && shouldDeleteIfEmpty) {
                     try {
                         resource.getFile().delete();
@@ -528,7 +539,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 outputStream = null;
             }
         }
-        
+
         /**
          * Creates a new empty file.
          * @return <tt>true</tt> if the file was successfully created
@@ -538,7 +549,7 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 return file.createNewFile() && file.exists();
             }
             catch (IOException e) {
-                // Per spring-batch code, on some filesystems you can get an exception 
+                // Per spring-batch code, on some filesystems you can get an exception
                 // here even though the file was successfully created
                 if (file.exists()) {
                     return true;
@@ -548,26 +559,22 @@ public class BeanIOFlatFileItemWriter<T> implements ItemStream, ItemWriter<T>,
                 }
             }
         }
-        
+
         /**
          * Creates a buffered writer opened to the beginning of the file
          * for the given file channel.
          */
         private Writer createBufferedWriter(FileChannel fileChannel, String encoding) {
             try {
-                Writer writer = Channels.newWriter(fileChannel, encoding);
-                
+                final Writer writer;
+
                 if (transactional) {
-                    writer = new TransactionAwareBufferedWriter(writer, new Runnable() { 
-                        public void run() { 
-                            Stream.this.destroy();
-                        }
-                    });
+                    writer = new TransactionAwareBufferedWriter(fileChannel, Stream.this::destroy);
+                } else {
+                    final Writer writerTemp = Channels.newWriter(fileChannel, encoding);
+                    writer = new BufferedWriter(writerTemp);
                 }
-                else {
-                    writer = new BufferedWriter(writer);
-                }
-                
+
                 return writer;
             }
             catch (UnsupportedCharsetException ex) {
