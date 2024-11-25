@@ -59,6 +59,20 @@ public class BeanIOFlatFileItemReader<T> extends AbstractItemCountingItemStreamI
     private BeanReader reader;
     private BeanReaderErrorHandler errorHandler;
 
+    public BeanIOFlatFileItemReader() {
+    }
+
+    public BeanIOFlatFileItemReader(final Resource streamMapping, final String streamName) {
+        this(streamMapping, streamName, null);
+    }
+
+    public BeanIOFlatFileItemReader(final Resource streamMapping, final String streamName, final Resource resource) {
+        this.streamMapping = streamMapping;
+        this.streamName = streamName;
+        this.resource = resource;
+        initializeStreamFactory();
+    }
+
     @PostConstruct
     public final void updateName() {
         setName(ClassUtils.getShortName(BeanIOFlatFileItemReader.class));
@@ -166,19 +180,22 @@ public class BeanIOFlatFileItemReader<T> extends AbstractItemCountingItemStreamI
      * @throws IllegalStateException if the configured stream name is not found
      *   in the <tt>StreamFactory</tt> after loading the stream mapping
      */
-    protected void initializeStreamFactory() throws Exception {
+    protected final void initializeStreamFactory() {
         if (streamFactory == null) {
             streamFactory = StreamFactory.newInstance();
         }
 
         // load the configured stream mapping if the stream name is not already mapped
         if (!streamFactory.isMapped(streamName) && streamMapping != null) {
-            InputStream in = streamMapping.getInputStream();
             try {
-                streamFactory.load(in);
-            }
-            finally {
-                IOUtil.closeQuietly(in);
+                final InputStream in = streamMapping.getInputStream();
+                try {
+                    streamFactory.load(in);
+                } finally {
+                    IOUtil.closeQuietly(in);
+                }
+            } catch (final IOException e) {
+                throw new BeanIOConfigurationException(e);
             }
         }
 
